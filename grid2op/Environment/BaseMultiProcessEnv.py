@@ -515,7 +515,6 @@ if __name__ == "__main__":
             acts[env_act_id] = agent.act(obs[env_act_id], rews[env_act_id], dones[env_act_id])
         obs, rews, dones, infos = multi_envs.step(acts)
         total_reward += np.sum(rews)
-        len(rews)
         sim_acts = [env.action_space() for _ in range(nb_env)]
         sim_obs, sim_rews, sim_dones, sim_infos = multi_envs.simulate(sim_acts)
         total_sim_reward += np.sum(sim_rews)
@@ -532,11 +531,11 @@ if __name__ == "__main__":
         ob, rew, done, info = env.step(act)
         if done:
             ob = env.reset()
-        total_reward_single += np.sum(rew)
+        total_reward_single += rew
         sim_ob, sim_rew, sim_done, sim_info = ob.simulate(env.action_space())
         total_sim_reward_single += sim_rew
     env.close()
-    print("total_reward mluti_env: {}".format(total_reward))
+    print("total_reward multi_env: {}".format(total_reward))
     print("total_sim_reward multi_env: {}".format(total_sim_reward))
     print("total_reward single env: {}".format(total_reward_single))
     print("total_sim_reward single env: {}".format(total_sim_reward_single))
