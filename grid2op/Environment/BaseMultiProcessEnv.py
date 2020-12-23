@@ -127,6 +127,12 @@ class RemoteEnv(Process):
                 self.remote.send((self.seed_used, self.all_seeds))
             elif cmd == "params":
                 self.remote.send(self.env.parameters)
+            elif cmd == "sim":
+                action = self.env.action_space.from_vect(data)
+                obs = self.env.get_obs()
+                sim_obs, sim_reward, sim_done, sim_info = obs.simulate(action)
+                sim_obs_v = sim_obs.to_vect()
+                self.remote.send((sim_obs_v, sim_reward, sim_done, sim_info))
             elif hasattr(self.env, cmd):
                 tmp = getattr(self.env, cmd)
                 self.remote.send(tmp)
@@ -208,6 +214,11 @@ class BaseMultiProcessEnvironment(GridObjects):
     def _send_act(self, actions):
         for remote, action in zip(self._remotes, actions):
             remote.send(('s', action.to_vect()))
+        self._waiting = True
+
+    def _send_sim(self, actions):
+        for remote, action in zip(self._remotes, actions):
+            remote.send(('sim', action.to_vect()))
         self._waiting = True
 
     def _wait_for_obs(self):
@@ -332,6 +343,23 @@ class BaseMultiProcessEnvironment(GridObjects):
         self._send_act(actions)
         obs, rews, dones, infos = self._wait_for_obs()
         return obs, rews, dones, infos
+
+    def simulate(self, actions):
+        """
+        Perform a simulation in all the underlying environments.
+        """
+        if len(actions) != self.nb_env:
+            raise MultiEnvException("Incorrect number of actions provided. You provided {} actions, but the "
+                                    "MultiEnvironment counts {} different environment."
+                                    "".format(len(actions), self.nb_env))
+        for act in actions:
+            if not isinstance(act, BaseAction):
+                raise MultiEnvException("All actions send to MultiEnvironment.step should be of type \"grid2op.BaseAction\""
+                                        "and not {}".format(type(act)))
+
+        self._send_sim(actions)
+        sim_obs, sim_rews, sim_dones, sim_infos = self._wait_for_obs()
+        return sim_obs, sim_rews, sim_dones, sim_infos
 
     def reset(self):
         """
@@ -480,6 +508,7 @@ if __name__ == "__main__":
     dones = [False for i in range(nb_env)]
 
     total_reward = 0.
+    total_sim_reward = 0
     for i in tqdm(range(NB_STEP)):
         acts = [None for _ in range(nb_env)]
         for env_act_id in range(nb_env):
@@ -487,6 +516,9 @@ if __name__ == "__main__":
         obs, rews, dones, infos = multi_envs.step(acts)
         total_reward += np.sum(rews)
         len(rews)
+        sim_acts = [env.action_space() for _ in range(nb_env)]
+        sim_obs, sim_rews, sim_dones, sim_infos = multi_envs.simulate(sim_acts)
+        total_sim_reward += np.sum(sim_rews)
 
     multi_envs.close()
 
@@ -494,13 +526,18 @@ if __name__ == "__main__":
     rew = env.reward_range[0]
     done = False
     total_reward_single = 0
+    total_sim_reward_single = 0
     for i in tqdm(range(NB_STEP)):
         act = agent.act(ob, rew, done)
         ob, rew, done, info = env.step(act)
         if done:
             ob = env.reset()
         total_reward_single += np.sum(rew)
+        sim_ob, sim_rew, sim_done, sim_info = ob.simulate(env.action_space())
+        total_sim_reward_single += sim_rew
     env.close()
     print("total_reward mluti_env: {}".format(total_reward))
+    print("total_sim_reward multi_env: {}".format(total_sim_reward))
     print("total_reward single env: {}".format(total_reward_single))
+    print("total_sim_reward single env: {}".format(total_sim_reward_single))
 
